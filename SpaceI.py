@@ -125,7 +125,7 @@ class StartView(arcade.View):
         arcade.start_render()
         arcade.draw_text("Space Invaders", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2,
                          arcade.color.WHITE, font_size=50, anchor_x="center")
-        arcade.draw_text("Click to Play", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 75,
+        arcade.draw_text("Press Enter to Play", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 75,
                          arcade.color.WHITE, font_size=20, anchor_x="center")
         arcade.draw_text("Press Q to Quit", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 100,
                          arcade.color.WHITE, font_size=20, anchor_x="center")
@@ -141,14 +141,14 @@ class StartView(arcade.View):
 
     # Other methods (on_mouse_press, etc.)
 
-    def on_mouse_press(self, _x, _y, _button, _modifiers):
-        game_view = SpaceInvadersGame()
-        game_view.setup()
-        self.window.show_view(game_view)
-
     def on_key_press(self, key, _modifiers):
-        if key == arcade.key.Q:
+        if key == arcade.key.ENTER:
+            game_view = SpaceInvadersGame()
+            game_view.setup()
+            self.window.show_view(game_view)
+        elif key == arcade.key.Q:
             arcade.close_window()
+
 
 
 class PauseView(arcade.View):
@@ -246,17 +246,18 @@ class Barrier(arcade.Sprite):
         super().__init__("images/barrier.png", 1)
         self.center_x = x
         self.center_y = y
-        self.health = 3  # Set the initial health of the barrier
+        self.health = 15  # Set the initial health of the barrier
 
     def update(self):
-        if self.health == 2:
-            self.texture = arcade.load_texture("images/barrier_damaged.png")
-        elif self.health == 1:
-            self.texture = arcade.load_texture("images/barrier_almost_destroyed.png")
+        # Update the texture based on the barrier's current health
+        if self.health > 10:
+            self.texture = arcade.load_texture("images/barrier.png")  # Full health
+        elif 5 < self.health <= 10:
+            self.texture = arcade.load_texture("images/barrier_damaged.png")  # Slightly damaged
+        elif 0 < self.health <= 5:
+            self.texture = arcade.load_texture("images/barrier_almost_destroyed.png")  # Heavily damaged
         elif self.health <= 0:
-            self.remove_from_sprite_lists()
-        else:
-            self.texture = arcade.load_texture("images/barrier.png")
+            self.remove_from_sprite_lists()  # Remove barrier when destroyed
 
 
 class Bullet(arcade.Sprite):
@@ -291,6 +292,7 @@ class SpaceInvadersGame(arcade.View):
         self.power_up_list.update()
         self.power_up_duration = 0  # Duration of the unlimited shooting power-up
         self.emitters = []  # A list to store all active emitters
+        self.unlimited_shooting_timer = 0  # Timer for power-up duration
 
     def spawn_boss(self):
         # Check if it's time to spawn the boss
@@ -325,7 +327,7 @@ class SpaceInvadersGame(arcade.View):
         self.enemy_projectile_list = arcade.SpriteList()
         self.barrier_list = arcade.SpriteList()
         for i in range(BARRIER_COUNT):
-            barrier = Barrier((i + 1) * SCREEN_WIDTH // (BARRIER_COUNT + 1), SCREEN_HEIGHT // 4)
+            barrier = Barrier((i + 1) * SCREEN_WIDTH // (BARRIER_COUNT + 1), SCREEN_HEIGHT // 3.5)
             self.barrier_list.append(barrier)
 
     def on_draw(self):
@@ -347,6 +349,12 @@ class SpaceInvadersGame(arcade.View):
         arcade.draw_text(f"Score: {self.score}", 10, SCREEN_HEIGHT - 20, arcade.color.WHITE, 16)
         # Draw the wave counter
         arcade.draw_text(f"Wave: {self.wave}", SCREEN_WIDTH - 100, SCREEN_HEIGHT - 20, arcade.color.WHITE, 16)
+
+        # Draw the power-up timer
+        if self.unlimited_shooting_enabled:
+            timer_text = f"Power-Up Time: {self.unlimited_shooting_timer:.1f}"
+            arcade.draw_text(timer_text, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 40,
+                             arcade.color.YELLOW, 16, anchor_x="center")
 
     def on_update(self, delta_time):
         self.player_list.update()
@@ -450,18 +458,19 @@ class SpaceInvadersGame(arcade.View):
         if self.player_list:  # Ensure player exists before checking collisions
             power_up_hit_list = arcade.check_for_collision_with_list(self.player_list[0], self.power_up_list)
             for power_up in power_up_hit_list:
-                try:
-                    power_up.remove_from_sprite_lists()
-                    self.enable_unlimited_shooting()
-                except Exception as e:
-                    print(f"Error handling power-up collision: {e}")
+                power_up.remove_from_sprite_lists()
+                self.enable_unlimited_shooting()
+        if self.unlimited_shooting_enabled:
+            self.unlimited_shooting_timer -= delta_time
+            if self.unlimited_shooting_timer <= 0:
+                self.disable_unlimited_shooting()
 
     def enable_unlimited_shooting(self):
         self.unlimited_shooting_enabled = True
-        arcade.schedule(self.player_list[0].toggle_visibility, 0.2)  # Flash player every 0.2 seconds
-        arcade.schedule(self.disable_unlimited_shooting, 7)  # Disable power-up after 7 seconds
+        self.unlimited_shooting_timer = 7  # Reset timer to 7 seconds each time
+        arcade.schedule(self.player_list[0].toggle_visibility, 0.2)  # Continue with flashing logic
 
-    def disable_unlimited_shooting(self, delta_time):
+    def disable_unlimited_shooting(self):
         self.unlimited_shooting_enabled = False
         arcade.unschedule(self.player_list[0].toggle_visibility)  # Stop flashing
         self.player_list[0].visible = True  # Make sure the player is visible
