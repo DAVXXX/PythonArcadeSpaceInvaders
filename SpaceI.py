@@ -103,6 +103,29 @@ class GameOverView(arcade.View):
             self.window.show_view(start_view)
 
 
+class CustomParticle:
+    def __init__(self, x, y):
+        self.position = (x, y)
+        self.velocity = (random.uniform(-2, 2), random.uniform(-2, 2))
+        self.lifetime = random.uniform(1, 3)
+        self.size = random.uniform(2, 5)
+        self.color = random.choice([arcade.color.RED, arcade.color.ORANGE, arcade.color.YELLOW])
+        self.alive = True
+
+    def update(self):
+        x, y = self.position
+        vx, vy = self.velocity
+        self.position = (x + vx, y + vy)
+        self.lifetime -= 0.05
+        if self.lifetime <= 0:
+            self.alive = False
+
+
+# Define create_particle_explosion function here
+def create_particle_explosion(x, y):
+    return [CustomParticle(x, y) for _ in range(50)]
+
+
 class PowerUp(arcade.Sprite):
     def __init__(self, image_path, scale, speed):
         super().__init__(image_path, scale)
@@ -148,7 +171,6 @@ class StartView(arcade.View):
             self.window.show_view(game_view)
         elif key == arcade.key.Q:
             arcade.close_window()
-
 
 
 class PauseView(arcade.View):
@@ -291,7 +313,7 @@ class SpaceInvadersGame(arcade.View):
         self.spawn_power_up()  # Ensure this is called in each frame
         self.power_up_list.update()
         self.power_up_duration = 0  # Duration of the unlimited shooting power-up
-        self.emitters = []  # A list to store all active emitters
+        self.particles = []  # Initialize the particles list
         self.unlimited_shooting_timer = 0  # Timer for power-up duration
 
     def spawn_boss(self):
@@ -339,9 +361,6 @@ class SpaceInvadersGame(arcade.View):
         self.bullet_list.draw()
         self.power_up_list.draw()  # Draw power-ups
 
-        for emitter in self.emitters:
-            emitter.draw()
-
         if self.boss:
             self.boss.draw()  # Draw the boss if present
 
@@ -349,6 +368,9 @@ class SpaceInvadersGame(arcade.View):
         arcade.draw_text(f"Score: {self.score}", 10, SCREEN_HEIGHT - 20, arcade.color.WHITE, 16)
         # Draw the wave counter
         arcade.draw_text(f"Wave: {self.wave}", SCREEN_WIDTH - 100, SCREEN_HEIGHT - 20, arcade.color.WHITE, 16)
+        # Draw particles
+        for particle in self.particles:
+            arcade.draw_circle_filled(*particle.position, particle.size, particle.color)
 
         # Draw the power-up timer
         if self.unlimited_shooting_enabled:
@@ -365,10 +387,11 @@ class SpaceInvadersGame(arcade.View):
         self.spawn_power_up()  # Call this every frame
         self.power_up_list.update()
 
-        for emitter in self.emitters:
-            emitter.update()
-            if not emitter.alive:
-                self.emitters.remove(emitter)
+        # Update particles
+        for particle in self.particles:
+            particle.update()
+            if not particle.alive:
+                self.particles.remove(particle)
 
         # Update the boss if it's present
         if self.boss:
@@ -394,15 +417,24 @@ class SpaceInvadersGame(arcade.View):
             if self.boss and arcade.check_for_collision(bullet, self.boss):
                 bullet.remove_from_sprite_lists()
                 self.boss.health -= 1
+                # Create a particle explosion when the boss is hit
+                self.particles.extend(create_particle_explosion(self.boss.center_x, self.boss.center_y))
+
                 if self.boss.health <= 0:
+                    # Create a larger particle explosion when the boss is destroyed
+                    self.particles.extend(
+                        create_particle_explosion(self.boss.center_x, self.boss.center_y))
                     self.boss.remove_from_sprite_lists()
                     self.boss = None
                     self.boss_defeated = True
                     self.score += 5
 
-            # Check for collisions with enemies
+            # Check for bullet collisions with enemies
             hit_enemies = arcade.check_for_collision_with_list(bullet, self.enemy_list)
             for enemy in hit_enemies:
+                # Create particle explosion and extend the particles list
+                self.particles.extend(create_particle_explosion(enemy.center_x, enemy.center_y))
+
                 enemy.remove_from_sprite_lists()
                 bullet.remove_from_sprite_lists()
                 enemy.on_hit()
@@ -420,6 +452,10 @@ class SpaceInvadersGame(arcade.View):
         # Check for collisions between player and enemy projectiles
         for projectile in self.enemy_projectile_list:
             if arcade.check_for_collision(projectile, self.player_list[0]):
+                # Create a particle explosion at the player's location
+                self.particles.extend(
+                    create_particle_explosion(self.player_list[0].center_x, self.player_list[0].center_y))
+
                 self.game_over = True
                 game_over_view = GameOverView(self)
                 self.window.show_view(game_over_view)
