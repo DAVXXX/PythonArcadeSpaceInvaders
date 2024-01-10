@@ -201,10 +201,24 @@ class Enemy(arcade.Sprite):
         self.change_x = ENEMY_SPEED_X
         self.speed_increase_factor = 1.3  # Define a factor to increase speed by, e.g., 5%
 
+    def on_hit(self):
+        self.scale = 1.2  # Temporarily increase size
+        self.angle = 15  # Temporarily rotate
+        arcade.schedule(self.reset_effect, 0.1)
+
+    def reset_effect(self, delta_time):
+        self.scale = 1.0
+        self.angle = 0
+        arcade.unschedule(self.reset_effect)
+
     def update(self):
         self.center_x += self.change_x
         if self.left <= 0 or self.right >= SCREEN_WIDTH:
             self.change_x *= -1  # Change direction
+
+            # Move the enemy down after hitting a wall
+            self.center_y -= ENEMY_SPEED_Y  # Adjust this value as needed
+
             self.increase_speed()  # Increase speed after bouncing
 
     def increase_speed(self):
@@ -275,6 +289,8 @@ class SpaceInvadersGame(arcade.View):
         self.unlimited_shooting_enabled = False
         self.spawn_power_up()  # Ensure this is called in each frame
         self.power_up_list.update()
+        self.power_up_duration = 0  # Duration of the unlimited shooting power-up
+        self.emitters = []  # A list to store all active emitters
 
     def spawn_boss(self):
         # Check if it's time to spawn the boss
@@ -321,6 +337,9 @@ class SpaceInvadersGame(arcade.View):
         self.bullet_list.draw()
         self.power_up_list.draw()  # Draw power-ups
 
+        for emitter in self.emitters:
+            emitter.draw()
+
         if self.boss:
             self.boss.draw()  # Draw the boss if present
 
@@ -337,6 +356,11 @@ class SpaceInvadersGame(arcade.View):
         self.bullet_list.update()
         self.spawn_power_up()  # Call this every frame
         self.power_up_list.update()
+
+        for emitter in self.emitters:
+            emitter.update()
+            if not emitter.alive:
+                self.emitters.remove(emitter)
 
         # Update the boss if it's present
         if self.boss:
@@ -373,6 +397,7 @@ class SpaceInvadersGame(arcade.View):
             for enemy in hit_enemies:
                 enemy.remove_from_sprite_lists()
                 bullet.remove_from_sprite_lists()
+                enemy.on_hit()
                 self.score += 1
 
         # Check for collisions between enemies and player
@@ -474,12 +499,27 @@ class Boss(arcade.Sprite):
         self.center_y = SCREEN_HEIGHT - 100
         self.health = 5  # Correctly initialized
         self.change_x = ENEMY_SPEED_X * 1.8
+        self.center_x += self.change_x
+        self.speed_increase_factor = 1.3  # Define a factor to increase speed by, e.g., 5%
 
     def update(self):
         # Boss movement
         self.center_x += self.change_x
         if self.left < 0 or self.right > SCREEN_WIDTH:
             self.change_x *= -1  # Change direction at screen edges
+            # Move the enemy down after hitting a wall
+            self.center_y -= ENEMY_SPEED_Y  # Adjust this value as needed
+
+            self.increase_speed()  # Increase speed after bouncing
+
+    def increase_speed(self):
+        # Increase the speed by a factor
+        new_speed = self.change_x * self.speed_increase_factor
+        max_speed = 10  # Define a maximum speed limit
+        if abs(new_speed) < max_speed:
+            self.change_x = new_speed
+        else:
+            self.change_x = max_speed if new_speed > 0 else -max_speed
 
 
 def main():
